@@ -1,0 +1,20 @@
+.vscode/
+node_modules/
+__pycache__
+dist
+out
+.DS_Store
+*.log*
+.env
+.vite
+ludusavi/**
+!ludusavi/config.yaml
+hachimi-python-rpc/
+.python-version
+
+# Sentry Config File
+.env.sentry-build-plugin
+
+*storybook.log
+
+aria2/

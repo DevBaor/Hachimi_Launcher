@@ -1,0 +1,236 @@
+import {
+  ptBR,
+  enUS,
+  es,
+  fr,
+  pl,
+  hu,
+  tr,
+  ru,
+  it,
+  be,
+  zhCN,
+  da,
+  vi,
+} from "date-fns/locale";
+
+import { charMap } from "./char-map";
+import { Downloader } from "./constants";
+import { format } from "date-fns";
+import { AchievementNotificationInfo } from "@types";
+import { getBaseLanguage } from "./locale";
+
+export * from "./constants";
+export * from "./html-sanitizer";
+export * from "./locale";
+
+export class UserNotLoggedInError extends Error {
+  constructor() {
+    super("user not logged in");
+    this.name = "UserNotLoggedInError";
+  }
+}
+
+export class SubscriptionRequiredError extends Error {
+  constructor() {
+    super("user does not have hachimi cloud subscription");
+    this.name = "SubscriptionRequiredError";
+  }
+}
+
+const FORMAT = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
+
+export const formatBytes = (bytes: number): string => {
+  if (!Number.isFinite(bytes) || isNaN(bytes) || bytes <= 0) {
+    return `0 ${FORMAT[0]}`;
+  }
+
+  const byteKBase = 1024;
+
+  const base = Math.floor(Math.log(bytes) / Math.log(byteKBase));
+
+  const formatedByte = bytes / byteKBase ** base;
+
+  return `${Math.trunc(formatedByte * 10) / 10} ${FORMAT[base]}`;
+};
+
+export const parseBytes = (sizeString: string | null): number | null => {
+  if (!sizeString) return null;
+
+  const regex = /^([\d.,]+)\s*([A-Za-z]+)$/;
+  const match = regex.exec(sizeString.trim());
+  if (!match) return null;
+
+  const value = Number.parseFloat(match[1].replaceAll(",", "."));
+  const unit = match[2].toUpperCase();
+
+  if (Number.isNaN(value)) return null;
+
+  const unitIndex = FORMAT.indexOf(unit);
+  if (unitIndex === -1) return null;
+
+  const byteKBase = 1024;
+  return Math.round(value * Math.pow(byteKBase, unitIndex));
+};
+
+export const formatBytesToMbps = (bytesPerSecond: number): string => {
+  const bitsPerSecond = bytesPerSecond * 8;
+  const mbps = bitsPerSecond / 1e6;
+  return `${Math.trunc(mbps * 10) / 10} Mbps`;
+};
+
+export const pipe =
+  <T>(...fns: ((arg: T) => any)[]) =>
+  (arg: T) =>
+    fns.reduce((prev, fn) => fn(prev), arg);
+
+export const removeReleaseYearFromName = (name: string) =>
+  name.replace(/\(\d{4}\)/g, "");
+
+export const removeSymbolsFromName = (name: string) =>
+  name.replace(/[^A-Za-z 0-9]/g, "");
+
+export const removeSpecialEditionFromName = (name: string) =>
+  name.replace(
+    /(The |Digital )?(GOTY|Deluxe|Standard|Ultimate|Definitive|Enhanced|Collector's|Premium|Digital|Limited|Game of the Year|Reloaded|[0-9]{4}) Edition/gi,
+    ""
+  );
+
+export const removeDuplicateSpaces = (name: string) =>
+  name.replace(/\s{2,}/g, " ");
+
+export const replaceDotsWithSpace = (name: string) => name.replace(/\./g, " ");
+
+export const replaceNbspWithSpace = (name: string) =>
+  name.replace(new RegExp(String.fromCharCode(160), "g"), " ");
+
+export const replaceUnderscoreWithSpace = (name: string) =>
+  name.replace(/_/g, " ");
+
+export const formatName = pipe<string>(
+  (str) =>
+    str.replace(
+      new RegExp(Object.keys(charMap).join("|"), "g"),
+      (match) => charMap[match]
+    ),
+  (str) => str.toLowerCase(),
+  removeReleaseYearFromName,
+  removeSpecialEditionFromName,
+  replaceUnderscoreWithSpace,
+  replaceDotsWithSpace,
+  replaceNbspWithSpace,
+  (str) => str.replace(/DIRECTOR'S CUT/gi, ""),
+  (str) => str.replace(/Friend's Pass/gi, ""),
+  removeSymbolsFromName,
+  removeDuplicateSpaces,
+  (str) => str.trim()
+);
+
+const realDebridHosts = ["https://1fichier.com", "https://mediafire.com"];
+
+export const getDownloadersForUri = (uri: string) => {
+  if (uri.startsWith("https://gofile.io")) return [Downloader.Gofile];
+
+  if (uri.startsWith("https://pixeldrain.com")) return [Downloader.PixelDrain];
+  if (uri.startsWith("https://datanodes.to")) return [Downloader.Datanodes];
+  if (uri.startsWith("https://www.mediafire.com"))
+    return [Downloader.Mediafire];
+  if (
+    uri.startsWith("https://buzzheavier.com") ||
+    uri.startsWith("https://bzzhr.co") ||
+    uri.startsWith("https://fuckingfast.net")
+  ) {
+    return [Downloader.Buzzheavier];
+  }
+  if (uri.startsWith("https://fuckingfast.co")) {
+    return [Downloader.FuckingFast];
+  }
+  if (
+    uri.startsWith("https://vikingfile.com") ||
+    uri.startsWith("https://vik1ngfile.site")
+  ) {
+    return [Downloader.VikingFile];
+  }
+  if (uri.startsWith("https://www.rootz.so")) {
+    return [Downloader.Rootz];
+  }
+
+  if (realDebridHosts.some((host) => uri.startsWith(host)))
+    return [Downloader.RealDebrid];
+
+  if (uri.startsWith("magnet:")) {
+    return [
+      Downloader.Torrent,
+      Downloader.Hydra,
+      Downloader.TorBox,
+      Downloader.RealDebrid,
+      Downloader.Premiumize,
+      Downloader.AllDebrid,
+    ];
+  }
+
+  return [];
+};
+
+export const getDownloadersForUris = (uris: string[]) => {
+  const downloadersSet = uris.reduce<Set<Downloader>>((prev, next) => {
+    const downloaders = getDownloadersForUri(next);
+    downloaders.forEach((downloader) => prev.add(downloader));
+
+    return prev;
+  }, new Set());
+
+  return Array.from(downloadersSet);
+};
+
+export const getDateLocale = (language: string) => {
+  const baseLanguage = getBaseLanguage(language);
+
+  if (baseLanguage === "pt") return ptBR;
+  if (baseLanguage === "es") return es;
+  if (baseLanguage === "fr") return fr;
+  if (baseLanguage === "hu") return hu;
+  if (baseLanguage === "pl") return pl;
+  if (baseLanguage === "tr") return tr;
+  if (baseLanguage === "ru") return ru;
+  if (baseLanguage === "it") return it;
+  if (baseLanguage === "be") return be;
+  if (baseLanguage === "zh") return zhCN;
+  if (baseLanguage === "da") return da;
+  if (baseLanguage === "vi") return vi;
+
+  return enUS;
+};
+
+export const formatDate = (
+  date: number | Date | string,
+  language: string
+): string => {
+  if (isNaN(new Date(date).getDate())) return "N/A";
+  return format(
+    date,
+    getBaseLanguage(language) === "en" ? "MM-dd-yyyy" : "dd/MM/yyyy"
+  );
+};
+
+export const generateAchievementCustomNotificationTest = (
+  t: any,
+  language?: string,
+  options: { isHidden?: boolean; isRare?: boolean; isPlatinum?: boolean } = {}
+): AchievementNotificationInfo => {
+  return {
+    title: t("test_achievement_notification_title", {
+      ns: "notifications",
+      lng: language ?? "en",
+    }),
+    description: t("test_achievement_notification_description", {
+      ns: "notifications",
+      lng: language ?? "en",
+    }),
+    iconUrl: "https://cdn.losbroxas.org/favicon.svg",
+    points: 2440,
+    isHidden: options.isHidden ?? false,
+    isRare: options.isRare ?? false,
+    isPlatinum: options.isPlatinum ?? false,
+  };
+};

@@ -1,0 +1,7 @@
+node_modules
+dist
+out
+.gitignore
+migration.stub
+hachimi-python-rpc/**
+src/main/generated/

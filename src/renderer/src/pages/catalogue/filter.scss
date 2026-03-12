@@ -1,0 +1,200 @@
+@use "../../scss/globals.scss";
+
+.filter-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #f3f4f9;
+  background-color: rgba(15, 18, 26, 0.85);
+  padding: 6px 10px 6px 12px;
+  border-radius: 999px;
+  border: solid 1px rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  min-height: 34px;
+  max-width: 100%;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.02),
+    0 8px 18px rgba(0, 0, 0, 0.25);
+
+  &__label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 220px;
+    line-height: 1.2;
+    display: flex;
+    align-items: center;
+  }
+
+  &__orb {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    box-shadow:
+      0 0 0 2px rgba(0, 0, 0, 0.28),
+      0 0 10px rgba(255, 255, 255, 0.18);
+    align-self: center;
+  }
+
+  &__remove-button {
+    color: rgba(255, 255, 255, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+    border: none;
+    line-height: 1;
+    align-self: center;
+    border-radius: 0;
+    width: 22px;
+    height: 22px;
+    transition:
+      background-color 0.2s ease,
+      color 0.2s ease;
+
+    &:hover {
+      background-color: transparent;
+      color: #ffffff;
+    }
+
+    &:focus-visible {
+      outline: 2px solid rgba(255, 255, 255, 0.4);
+      outline-offset: 1px;
+    }
+
+    svg {
+      display: block;
+      transform: translateY(-0.5px);
+    }
+  }
+}
+
+.filter-section {
+  background-color: rgba(12, 14, 20, 0.9);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow:
+    0 12px 22px rgba(0, 0, 0, 0.35),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+  position: relative;
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-left: 3px solid var(--filter-section-color, rgba(255, 255, 255, 0.3));
+    opacity: 0.7;
+    pointer-events: none;
+  }
+
+  &__button {
+    padding: calc(globals.$spacing-unit * 2) calc(globals.$spacing-unit * 2.5);
+    display: flex;
+    align-items: center;
+    background-color: transparent;
+    color: globals.$muted-color;
+    width: 100%;
+    cursor: pointer;
+    transition:
+      background-color 0.2s ease,
+      color 0.2s ease;
+    gap: globals.$spacing-unit;
+    font-size: globals.$body-font-size;
+    font-weight: bold;
+    border: none;
+
+    &:hover {
+      background-color: rgba(255, 255, 255, 0.08);
+    }
+
+    &:active {
+      opacity: globals.$active-opacity;
+    }
+  }
+
+  &__chevron {
+    transition: transform ease 0.2s;
+    flex-shrink: 0;
+
+    &--open {
+      transform: rotate(180deg);
+    }
+  }
+
+  &__header {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    min-width: 0;
+    flex: 1;
+  }
+
+  &__header-count {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.75);
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    min-width: 24px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  &__orb {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
+  &__title {
+    font-size: 15px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__content {
+    overflow: hidden;
+    transition: max-height 0.4s cubic-bezier(0, 1, 0, 1);
+    background-color: rgba(7, 9, 14, 0.7);
+    position: relative;
+  }
+
+  &__content-inner {
+    padding: calc(globals.$spacing-unit * 2);
+  }
+
+  &__count {
+    font-size: 12px;
+    margin-bottom: 12px;
+    display: block;
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  &__clear-button {
+    font-size: 12px;
+    margin-bottom: 12px;
+    display: block;
+    color: rgba(255, 255, 255, 0.75);
+    cursor: pointer;
+    text-decoration: underline;
+
+    &:focus-visible {
+      outline: 2px solid globals.$muted-color;
+      outline-offset: 1px;
+    }
+  }
+
+  &__search {
+    margin-bottom: 12px;
+  }
+
+  &__item {
+    height: 28px;
+    max-height: 28px;
+  }
+}

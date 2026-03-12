@@ -1,0 +1,497 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Sidebar, BottomPanel, Header, Toast } from "@renderer/components";
+import { WorkWonders } from "workwonders-sdk";
+import {
+  useAppDispatch,
+  useAppSelector,
+  useDownload,
+  useLibrary,
+  useToast,
+  useUserDetails,
+} from "@renderer/hooks";
+import { useDownloadOptionsListener } from "@renderer/hooks/use-download-options-listener";
+
+import { Outlet, useLocation } from "react-router-dom";
+import {
+  setUserPreferences,
+  toggleDraggingDisabled,
+  closeToast,
+  setUserDetails,
+  setProfileBackground,
+  setGameRunning,
+  setExtractionProgress,
+  clearExtraction,
+} from "@renderer/features";
+import { useTranslation } from "react-i18next";
+import { useSubscription } from "./hooks/use-subscription";
+import { HydraCloudModal } from "./pages/shared-modals/hydra-cloud/hydra-cloud-modal";
+import { ArchiveDeletionModal } from "./pages/downloads/archive-deletion-error-modal";
+
+import {
+  injectCustomCss,
+  removeCustomCss,
+  getAchievementSoundUrl,
+  getAchievementSoundVolume,
+} from "./helpers";
+import { levelDBService } from "./services/leveldb.service";
+import type { UserPreferences } from "@types";
+import hachimiIcon from "@renderer/assets/icons/hachimi.png";
+import "./app.scss";
+
+export interface AppProps {
+  children: React.ReactNode;
+}
+
+type WorkWondersWithKnowledge = WorkWonders & {
+  knowledge?: {
+    initKnowledgeWidget?: () => void;
+    showArticle?: (articleId: number) => void;
+  };
+};
+
+type StartupStatusKey =
+  | "startup_loading_settings"
+  | "startup_loading_library"
+  | "startup_preparing_interface";
+
+type BootSplashController = {
+  setStatus?: (key: StartupStatusKey) => void;
+  hide?: () => void;
+};
+
+const STARTUP_SPLASH_MIN_MS = 2600;
+const STARTUP_SPLASH_MAX_MS = 5000;
+
+export function App() {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const { updateLibrary, library } = useLibrary();
+  const splashMinimumReachedRef = useRef(false);
+
+  // Listen for new download options updates
+  useDownloadOptionsListener();
+
+  const { t } = useTranslation("app");
+
+  const { clearDownload, setLastPacket } = useDownload();
+
+  const workwondersRef = useRef<WorkWonders | null>(null);
+
+  const {
+    hasActiveSubscription,
+    fetchUserDetails,
+    updateUserDetails,
+    clearUserDetails,
+  } = useUserDetails();
+
+  const { hideHydraCloudModal, isHydraCloudModalVisible, hydraCloudFeature } =
+    useSubscription();
+
+  const dispatch = useAppDispatch();
+
+  const location = useLocation();
+
+  const draggingDisabled = useAppSelector(
+    (state) => state.window.draggingDisabled
+  );
+
+  const toast = useAppSelector((state) => state.toast);
+
+  const { showSuccessToast, showErrorToast } = useToast();
+
+  const [showArchiveDeletionModal, setShowArchiveDeletionModal] =
+    useState(false);
+  const [archivePaths, setArchivePaths] = useState<string[]>([]);
+  const [showStartupSplash, setShowStartupSplash] = useState(true);
+  const [startupStatusKey, setStartupStatusKey] = useState<StartupStatusKey>(
+    "startup_loading_settings"
+  );
+  const [isBootstrapReady, setIsBootstrapReady] = useState(false);
+
+  const bootSplash = window.__HACHIMI_BOOT_SPLASH__ as
+    | BootSplashController
+    | undefined;
+
+  const tryHideStartupSplash = useCallback(() => {
+    if (isBootstrapReady && splashMinimumReachedRef.current) {
+      setShowStartupSplash(false);
+    }
+  }, [isBootstrapReady]);
+
+  useEffect(() => {
+    if (!showStartupSplash) return;
+
+    const minimumTimer = window.setTimeout(() => {
+      splashMinimumReachedRef.current = true;
+      tryHideStartupSplash();
+    }, STARTUP_SPLASH_MIN_MS);
+
+    const maximumTimer = window.setTimeout(() => {
+      setShowStartupSplash(false);
+    }, STARTUP_SPLASH_MAX_MS);
+
+    return () => {
+      window.clearTimeout(minimumTimer);
+      window.clearTimeout(maximumTimer);
+    };
+  }, [showStartupSplash, tryHideStartupSplash]);
+
+  useEffect(() => {
+    tryHideStartupSplash();
+  }, [tryHideStartupSplash]);
+
+  useEffect(() => {
+    bootSplash?.setStatus?.(startupStatusKey);
+  }, [startupStatusKey, bootSplash]);
+
+  useEffect(() => {
+    if (!showStartupSplash) {
+      bootSplash?.hide?.();
+    }
+  }, [showStartupSplash, bootSplash]);
+
+  useEffect(() => {
+    setStartupStatusKey("startup_loading_settings");
+
+    const loadPreferences = levelDBService
+      .get("userPreferences", null, "json")
+      .then((preferences) => {
+        dispatch(setUserPreferences(preferences as UserPreferences | null));
+      });
+
+    const loadLibrary = loadPreferences
+      .then(() => {
+        setStartupStatusKey("startup_loading_library");
+        return updateLibrary();
+      })
+      .finally(() => {
+        setStartupStatusKey("startup_preparing_interface");
+      });
+
+    void Promise.all([loadPreferences, loadLibrary]);
+  }, [dispatch, updateLibrary]);
+
+  useEffect(() => {
+    const unsubscribe = window.electron.onDownloadProgress(
+      (downloadProgress) => {
+        if (downloadProgress?.progress === 1) {
+          clearDownload();
+          updateLibrary();
+          return;
+        }
+
+        setLastPacket(downloadProgress);
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [clearDownload, setLastPacket, updateLibrary]);
+
+  useEffect(() => {
+    const unsubscribe = window.electron.onHardDelete(() => {
+      updateLibrary();
+    });
+
+    return () => unsubscribe();
+  }, [updateLibrary]);
+
+  const setupWorkWonders = useCallback(
+    async (token?: string, locale?: string) => {
+      if (workwondersRef.current) return;
+
+      workwondersRef.current = new WorkWonders();
+
+      const possibleLocales = ["en", "pt", "ru"];
+
+      const parsedLocale =
+        possibleLocales.find((l) => l === locale?.slice(0, 2)) ?? "en";
+
+      await workwondersRef.current.init({
+        organization: "hydra",
+        token,
+        locale: parsedLocale,
+      });
+
+      const workWondersWithKnowledge =
+        workwondersRef.current as WorkWondersWithKnowledge;
+      workWondersWithKnowledge.knowledge?.initKnowledgeWidget?.();
+
+      if (token) {
+        workwondersRef.current.feedback.initFeedbackWidget();
+      }
+    },
+    [workwondersRef]
+  );
+
+  useEffect(() => {
+    const onClick = async (event: MouseEvent) => {
+      const userPreferences = await window.electron.getUserPreferences();
+      const language = userPreferences?.language ?? "en";
+
+      const articleMapping = {
+        pt: {
+          "cannot-write-directory": 1429,
+          seeding: 1442,
+          "peers-and-seeds": 1449,
+          "steam-achievements": 1412,
+        },
+        en: {
+          "cannot-write-directory": 4122,
+          seeding: 4116,
+          "peers-and-seeds": 4119,
+          "steam-achievements": 4140,
+        },
+      };
+
+      const $helpCenterTarget = (event.target as HTMLElement).closest(
+        "[data-open-article]"
+      );
+
+      if ($helpCenterTarget) {
+        const article = $helpCenterTarget.getAttribute("data-open-article");
+        const articleId =
+          articleMapping[language.slice(0, 2)]?.[
+            article as keyof typeof articleMapping
+          ] ?? articleMapping["en"]?.[article as keyof typeof articleMapping];
+
+        if (articleId) {
+          const workWondersWithKnowledge =
+            workwondersRef.current as WorkWondersWithKnowledge | null;
+          workWondersWithKnowledge?.knowledge?.showArticle?.(articleId);
+        }
+      }
+    };
+
+    window.addEventListener("click", onClick);
+
+    return () => {
+      window.removeEventListener("click", onClick);
+    };
+  }, []);
+
+  const setupExternalResources = useCallback(async () => {
+    const cachedUserDetails = window.localStorage.getItem("userDetails");
+
+    if (cachedUserDetails) {
+      const { profileBackground, ...userDetails } =
+        JSON.parse(cachedUserDetails);
+
+      dispatch(setUserDetails(userDetails));
+      dispatch(setProfileBackground(profileBackground));
+    }
+
+    const userPreferences = await window.electron.getUserPreferences();
+    const userDetails = await fetchUserDetails().catch(() => null);
+
+    if (userDetails) {
+      updateUserDetails(userDetails);
+    }
+
+    setupWorkWonders(userDetails?.workwondersJwt, userPreferences?.language);
+
+    if (!document.getElementById("external-resources")) {
+      const $script = document.createElement("script");
+      $script.id = "external-resources";
+      $script.src = `${import.meta.env.RENDERER_VITE_EXTERNAL_RESOURCES_URL}/bundle.js?t=${Date.now()}`;
+      document.head.appendChild($script);
+    }
+  }, [fetchUserDetails, updateUserDetails, dispatch, setupWorkWonders]);
+
+  useEffect(() => {
+    setupExternalResources()
+      .catch(() => {})
+      .finally(() => {
+        setIsBootstrapReady(true);
+      });
+  }, [setupExternalResources]);
+
+  const onSignIn = useCallback(() => {
+    fetchUserDetails().then((response) => {
+      if (response) {
+        updateUserDetails(response);
+        showSuccessToast(t("successfully_signed_in"));
+      }
+    });
+  }, [fetchUserDetails, t, showSuccessToast, updateUserDetails]);
+
+  useEffect(() => {
+    const unsubscribe = window.electron.onGamesRunning((gamesRunning) => {
+      if (gamesRunning.length) {
+        const lastGame = gamesRunning[gamesRunning.length - 1];
+        const libraryGame = library.find(
+          (library) => library.id === lastGame.id
+        );
+
+        if (libraryGame) {
+          dispatch(
+            setGameRunning({
+              ...libraryGame,
+              sessionDurationInMillis: lastGame.sessionDurationInMillis,
+            })
+          );
+          return;
+        }
+      }
+      dispatch(setGameRunning(null));
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [dispatch, library]);
+
+  useEffect(() => {
+    const listeners = [
+      window.electron.onSignIn(onSignIn),
+      window.electron.onLibraryBatchComplete(() => {
+        updateLibrary();
+      }),
+      window.electron.onSignOut(() => clearUserDetails()),
+      window.electron.onExtractionProgress((shop, objectId, progress) => {
+        dispatch(setExtractionProgress({ shop, objectId, progress }));
+      }),
+      window.electron.onExtractionComplete(() => {
+        dispatch(clearExtraction());
+        updateLibrary();
+      }),
+      window.electron.onExtractionFailed(() => {
+        dispatch(clearExtraction());
+        updateLibrary();
+        showErrorToast(
+          t("extraction_failed_title", { ns: "downloads" }),
+          t("extraction_failed_description", { ns: "downloads" })
+        );
+      }),
+      window.electron.onArchiveDeletionPrompt((paths) => {
+        setArchivePaths(paths);
+        setShowArchiveDeletionModal(true);
+      }),
+    ];
+
+    return () => {
+      listeners.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [onSignIn, updateLibrary, clearUserDetails, dispatch, showErrorToast, t]);
+
+  useEffect(() => {
+    const asyncScrollAndNotify = async () => {
+      if (contentRef.current) contentRef.current.scrollTop = 0;
+      await workwondersRef.current?.notifyUrlChange?.();
+    };
+    asyncScrollAndNotify();
+  }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    new MutationObserver(() => {
+      const modal = document.body.querySelector("[data-hydra-dialog]");
+
+      dispatch(toggleDraggingDisabled(Boolean(modal)));
+    }).observe(document.body, {
+      attributes: false,
+      childList: true,
+    });
+  }, [dispatch, draggingDisabled]);
+
+  const loadAndApplyTheme = useCallback(async () => {
+    const allThemes = (await levelDBService.values("themes")) as {
+      isActive?: boolean;
+      code?: string;
+    }[];
+    const activeTheme = allThemes.find((theme) => theme.isActive);
+    if (activeTheme?.code) {
+      injectCustomCss(activeTheme.code);
+    } else {
+      removeCustomCss();
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAndApplyTheme();
+  }, [loadAndApplyTheme]);
+
+  useEffect(() => {
+    const unsubscribe = window.electron.onCustomThemeUpdated(() => {
+      loadAndApplyTheme();
+    });
+
+    return () => unsubscribe();
+  }, [loadAndApplyTheme]);
+
+  const playAudio = useCallback(async () => {
+    const soundUrl = await getAchievementSoundUrl();
+    const volume = await getAchievementSoundVolume();
+    const audio = new Audio(soundUrl);
+    audio.volume = volume;
+    audio.play();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = window.electron.onAchievementUnlocked(() => {
+      playAudio();
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [playAudio]);
+
+  const handleToastClose = useCallback(() => {
+    dispatch(closeToast());
+  }, [dispatch]);
+
+  return (
+    <>
+      {window.electron.platform === "win32" && (
+        <div className="title-bar">
+          <h4 className="title-bar__title">
+            <img className="title-bar__icon" src={hachimiIcon} alt="" />
+            Hachimi
+            {hasActiveSubscription && (
+              <span className="title-bar__cloud-text"> Cloud</span>
+            )}
+          </h4>
+        </div>
+      )}
+
+      <Toast
+        visible={toast.visible}
+        title={toast.title}
+        message={toast.message}
+        type={toast.type}
+        onClose={handleToastClose}
+        duration={toast.duration}
+      />
+
+      <HydraCloudModal
+        visible={isHydraCloudModalVisible}
+        onClose={hideHydraCloudModal}
+        feature={hydraCloudFeature}
+      />
+
+      <ArchiveDeletionModal
+        visible={showArchiveDeletionModal}
+        archivePaths={archivePaths}
+        onClose={() => setShowArchiveDeletionModal(false)}
+      />
+
+      <main>
+        <Sidebar />
+
+        <article className="container">
+          <Header />
+
+          <section
+            ref={contentRef}
+            id="scrollableDiv"
+            className="container__content"
+          >
+            <Outlet />
+          </section>
+        </article>
+      </main>
+
+      <BottomPanel />
+    </>
+  );
+}

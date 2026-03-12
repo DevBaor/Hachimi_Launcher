@@ -1,0 +1,76 @@
+appId: gg.hachimi.launcher
+productName: Hachimi
+icon: build/icon.ico
+directories:
+  buildResources: build
+extraResources:
+  - ludusavi
+  - hachimi-python-rpc
+  - seeds
+  - from: node_modules/create-desktop-shortcuts/src/windows.vbs
+  - from: resources/achievement.wav
+files:
+  - "!**/.vscode/*"
+  - "!src/*"
+  - "!electron.vite.config.{js,ts,mjs,cjs}"
+  - "!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}"
+  - "!{.env,.env.*,.npmrc,pnpm-lock.yaml}"
+  - "!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}"
+asarUnpack:
+  - resources/**
+  - node_modules/sharp/**
+  - node_modules/@img/sharp-libvips-*/**
+  - node_modules/classic-level/**
+win:
+  executableName: Hachimi
+  icon: build/icon.ico
+  extraResources:
+    - from: binaries/aria2c.exe
+    - from: binaries/7z.exe
+    - from: binaries/7z.dll
+  target:
+    - nsis
+    - portable
+nsis:
+  artifactName: ${productName}-Setup.${ext}
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  createDesktopShortcut: always
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+portable:
+  artifactName: ${productName}.${ext}
+mac:
+  entitlementsInherit: build/entitlements.mac.plist
+  extraResources:
+    - from: binaries/7zz
+  extendInfo:
+    - NSCameraUsageDescription: Application requests access to the device's camera.
+    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
+    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
+    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+  notarize: false
+dmg:
+  artifactName: ${name}-${version}.${ext}
+linux:
+  extraResources:
+    - from: binaries/7zzs
+    - from: binaries/aria2c
+    - from: binaries/umu/umu-run
+  target:
+    - AppImage
+    - snap
+    - deb
+    - rpm
+  maintainer: electronjs.org
+  category: Game
+  mimeTypes:
+    - x-scheme-handler/hachimi
+appImage:
+  artifactName: ${name}-${version}.${ext}
+npmRebuild: false
+publish: null
+electronDownload:
+  mirror: https://npmmirror.com/mirrors/electron/

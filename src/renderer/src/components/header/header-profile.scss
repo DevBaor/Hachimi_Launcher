@@ -1,0 +1,119 @@
+@use "../../scss/globals.scss";
+
+.header-profile {
+  display: flex;
+  align-items: center;
+  gap: globals.$spacing-unit;
+  -webkit-app-region: no-drag;
+
+  &__button {
+    display: flex;
+    align-items: center;
+    gap: globals.$spacing-unit;
+    padding: 6px 12px;
+    border-radius: 999px;
+    border: 1px solid globals.$border-color;
+    background: rgba(12, 14, 20, 0.65);
+    color: globals.$muted-color;
+    cursor: pointer;
+    transition: all ease 0.2s;
+    max-width: 220px;
+
+    &:hover {
+      border-color: rgba(255, 255, 255, 0.3);
+      background: rgba(18, 20, 28, 0.8);
+    }
+  }
+
+  &__button--guest {
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px;
+    min-width: 70px;
+  }
+
+  &__info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  &__title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #f6f7fb;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__subtitle {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.6);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__guest-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.75);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  &__notification-button {
+    color: globals.$muted-color;
+    cursor: pointer;
+    border-radius: 50%;
+    width: 36px;
+    min-width: 36px;
+    min-height: 36px;
+    height: 36px;
+    background-color: rgba(12, 14, 20, 0.65);
+    border: 1px solid globals.$border-color;
+    position: relative;
+    transition: all ease 0.2s;
+
+    &:hover {
+      background-color: rgba(255, 255, 255, 0.12);
+    }
+  }
+
+  &__notification-badge {
+    background-color: globals.$success-color;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    font-size: 10px;
+    font-weight: bold;
+    color: #fff;
+  }
+
+  @media (max-width: 900px) {
+    &__button {
+      max-width: 160px;
+    }
+
+    &__subtitle {
+      display: none;
+    }
+  }
+
+  @media (max-width: 720px) {
+    &__button {
+      padding: 6px;
+    }
+
+    &__info {
+      display: none;
+    }
+  }
+}
